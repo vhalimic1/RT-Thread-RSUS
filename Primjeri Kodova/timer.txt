@@ -1,0 +1,60 @@
+#include <rtthread.h>
+
+/* Timer Control Block */
+static rt_timer_t timer1;
+static struct rt_timer timer2;
+static int cnt = 0;
+
+void print_tick(char* string)
+{
+    rt_kprintf("%s - rt_tick = %d\n", string, rt_tick_get());
+}
+
+/* Timer 1 Timeout Function */
+static void timeout1(void *parameter)
+{
+    print_tick("periodic timer");
+    rt_kprintf("periodic timer is timeout %d\n", cnt);
+
+    /* On the 10th time, stops perodic timer */
+    if (cnt++>= 5)
+    {
+        rt_timer_stop(timer1);
+        rt_kprintf("periodic timer was stopped! \n");
+    }
+}
+
+/* Timer 2 Timeout Function */
+static void timeout2(void *parameter)
+{
+    print_tick("one-shot timer");
+    rt_kprintf("one shot timer is timeout\n");
+}
+
+int main(void)
+{
+    print_tick("Application started.");
+    /* Create Timer 1 Periodic Timer */
+    timer1 = rt_timer_create("timer1", timeout1,
+                             RT_NULL, 10,
+                             RT_TIMER_FLAG_PERIODIC);
+
+    print_tick("Timer 1 created.");
+
+    /* Start Timer 1*/
+    if (timer1 != RT_NULL) rt_timer_start(timer1);
+
+    print_tick("Timer 1 started.");
+
+    /* Create Timer 2 One Shot Timer */
+    rt_timer_init(&timer2, "timer2", timeout2,
+                  RT_NULL, 50,
+                  RT_TIMER_FLAG_ONE_SHOT);
+
+    print_tick("Timer 2 initialized.");
+
+    rt_timer_start(&timer2);
+
+    print_tick("Timer 2 started.");
+}
+

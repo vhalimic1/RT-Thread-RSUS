@@ -1,0 +1,120 @@
+#include <rtthread.h>
+
+/* Message queue control block */
+static struct rt_messagequeue mq;
+/* The memory pool used to place messages in the message queue */
+static rt_uint8_t msg_pool[2048];
+
+ALIGN(RT_ALIGN_SIZE)
+static char thread1_stack[1024];
+static struct rt_thread thread1;
+/* Thread 1 entry function */
+static void thread1_entry(void *parameter)
+{
+    char buf = 0;
+    rt_uint8_t cnt = 0;
+
+    while (1)
+    {
+        /* Receive messages from the message queue */
+        if (rt_mq_recv(&mq, &buf, sizeof(buf), RT_WAITING_FOREVER) == RT_EOK)
+        {
+            rt_kprintf("thread1: recv msg from msg queue, the content:%c\n", buf);
+            if (cnt == 5)
+            {
+                break;
+            }
+        }
+        /* Delay 50ms */
+        cnt++;
+        rt_thread_mdelay(50);
+    }
+    rt_kprintf("thread1: detach mq \n");
+    rt_mq_detach(&mq);
+}
+
+ALIGN(RT_ALIGN_SIZE)
+static char thread2_stack[1024];
+static struct rt_thread thread2;
+/* Thread 2 entry */
+static void thread2_entry(void *parameter)
+{
+    int result;
+    char buf = 'A';
+    rt_uint8_t cnt = 0;
+
+    while (1)
+    {
+        if (cnt == 4)
+        {
+            /* Send emergency message to the message queue */
+            result = rt_mq_urgent(&mq, &buf, 1);
+            if (result != RT_EOK)
+            {
+                rt_kprintf("rt_mq_urgent ERR\n");
+            }
+            else
+            {
+                rt_kprintf("thread2: send urgent message - %c\n", buf);
+            }
+        }
+        else if (cnt>= 6)/* Exit after sending 20 messages */
+        {
+            rt_kprintf("message queue stop send, thread2 quit\n");
+            break;
+        }
+        else
+        {
+            /* Send a message to the message queue */
+            result = rt_mq_send(&mq, &buf, 1);
+            if (result != RT_EOK)
+            {
+                rt_kprintf("rt_mq_send ERR\n");
+            }
+
+            rt_kprintf("thread2: send message - %c\n", buf);
+        }
+        buf++;
+        cnt++;
+        /* Delay 5ms */
+        rt_thread_mdelay(5);
+    }
+}
+
+/* Initialization of the message queue example */
+int main(void)
+{
+    rt_err_t result;
+
+    /* Initialize the message queue */
+    result = rt_mq_init(&mq,
+                        "mqt",
+                        &msg_pool[0],          /* Memory pool points to msg_pool */
+                        1,                     /* The size of each message is 1 byte */
+                        sizeof(msg_pool),      /* The size of the memory pool is the size of msg_pool */
+                        RT_IPC_FLAG_FIFO);     /* If there are multiple threads waiting, assign messages in first come first get mode. */
+
+    if (result != RT_EOK)
+    {
+        rt_kprintf("init message queue failed.\n");
+        return -1;
+    }
+
+    rt_thread_init(&thread1,
+                   "thread1",
+                   thread1_entry,
+                   RT_NULL,
+                   &thread1_stack[0],
+                   sizeof(thread1_stack), 25, 5);
+    rt_thread_startup(&thread1);
+
+    rt_thread_init(&thread2,
+                   "thread2",
+                   thread2_entry,
+                   RT_NULL,
+                   &thread2_stack[0],
+                   sizeof(thread2_stack), 25, 5);
+    rt_thread_startup(&thread2);
+
+    return 0;
+}

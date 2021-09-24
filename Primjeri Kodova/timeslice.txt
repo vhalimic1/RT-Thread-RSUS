@@ -1,0 +1,43 @@
+#include <rtthread.h>
+
+#define THREAD_STACK_SIZE   1024
+#define THREAD_PRIORITY     15
+#define THREAD_TIMESLICE    3
+
+/* Thread Entry */
+static void thread_entry(void* parameter)
+{
+    rt_uint32_t value;
+    rt_uint32_t count = 0;
+
+    value = (rt_uint32_t)parameter;
+    while (1)
+    {
+        if(0 == (count % 25))
+        {
+            rt_kprintf("\n thread %d is running, thread %d count = %d ", value , value , count);
+
+            if(count> 500)
+               return;
+        }
+         count++;
+     }
+}
+
+//int timeslice_sample(void)
+int main(void)
+{
+    rt_thread_t tid = RT_NULL;
+    /* Create Thread 1 */
+    tid = rt_thread_create("thread1", thread_entry, (void*)1, THREAD_STACK_SIZE, THREAD_PRIORITY, THREAD_TIMESLICE);
+    if (tid != RT_NULL)
+        rt_thread_startup(tid);
+
+
+    /* Create Thread 2 */
+    tid = rt_thread_create("thread2", thread_entry, (void*)2, THREAD_STACK_SIZE, THREAD_PRIORITY, THREAD_TIMESLICE-2);
+    if (tid != RT_NULL)
+        rt_thread_startup(tid);
+    return 0;
+}
+

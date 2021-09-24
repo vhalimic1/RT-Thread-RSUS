@@ -1,0 +1,104 @@
+#include <rtthread.h>
+
+#define THREAD_PRIORITY      9
+#define THREAD_TIMESLICE     5
+
+/* Number 1 in hex                           00000001
+ * (1 << 3) shift number 1 three times left  00001000 => 8
+ * (1 << 5) shift number 1 five times left   00100000 => 32
+ */
+
+#define EVENT_FLAG3 (1 << 3)
+#define EVENT_FLAG5 (1 << 5)
+
+/* Event control block */
+static struct rt_event event;
+
+ALIGN(RT_ALIGN_SIZE)
+static char thread1_stack[1024];
+static struct rt_thread thread1;
+
+/* Thread 1 entry function*/
+static void thread1_recv_event(void *param)
+{
+    rt_uint32_t e;
+    /* The first time the event is received, either event 3 or event 5 can trigger thread 1, clearing the event flag after receiving */
+    if (rt_event_recv(&event, (EVENT_FLAG3 | EVENT_FLAG5),
+                      RT_EVENT_FLAG_OR | RT_EVENT_FLAG_CLEAR,
+                      RT_WAITING_FOREVER, &e) == RT_EOK)
+    {
+        rt_kprintf("thread1: OR recv event 0x%x\n", e);
+    }
+
+    rt_kprintf("thread1: delay 1s to prepare the second event\n");
+    rt_thread_mdelay(1000);
+
+    /* The second time the event is received, both event 3 and event 5 can trigger thread 1, clearing the event flag after receiving */
+    if (rt_event_recv(&event, (EVENT_FLAG3 | EVENT_FLAG5),
+                      RT_EVENT_FLAG_AND | RT_EVENT_FLAG_CLEAR,
+                      RT_WAITING_FOREVER, &e) == RT_EOK)
+    {
+        rt_kprintf("thread1: AND recv event 0x%x\n", e);
+    }
+    rt_kprintf("thread1 leave.\n");
+}
+
+
+ALIGN(RT_ALIGN_SIZE)
+static char thread2_stack[1024];
+static struct rt_thread thread2;
+
+/* Thread 2 Entry */
+static void thread2_send_event(void *param)
+{
+    rt_kprintf("thread2: send event3\n");
+    rt_event_send(&event, EVENT_FLAG3);
+    rt_kprintf("Event set value: %d\n", event.set);
+    rt_thread_mdelay(200);
+
+    rt_kprintf("thread2: send event5\n");
+    rt_event_send(&event, EVENT_FLAG5);
+    rt_kprintf("Event set value: %d\n", event.set);
+    rt_thread_mdelay(200);
+
+    rt_kprintf("thread2: send event3\n");
+    rt_event_send(&event, EVENT_FLAG3);
+    rt_kprintf("Event set value: %d\n", event.set);
+    rt_kprintf("thread2 leave.\n");
+}
+
+int main(void)
+{
+    rt_err_t result;
+
+    rt_kprintf("Starting program.\n");
+    rt_kprintf("EVENT_FLAG3 = %d ; EVENT_FLAG5 = %d\n", EVENT_FLAG3, EVENT_FLAG5);
+
+    /* Initialize event object */
+    result = rt_event_init(&event, "event", RT_IPC_FLAG_FIFO);
+    if (result != RT_EOK)
+    {
+        rt_kprintf("init event failed.\n");
+        return -1;
+    }
+
+    rt_thread_init(&thread1,
+                   "thread1",
+                   thread1_recv_event,
+                   RT_NULL,
+                   &thread1_stack[0],
+                   sizeof(thread1_stack),
+                   THREAD_PRIORITY - 1, THREAD_TIMESLICE);
+    rt_thread_startup(&thread1);
+
+    rt_thread_init(&thread2,
+                   "thread2",
+                   thread2_send_event,
+                   RT_NULL,
+                   &thread2_stack[0],
+                   sizeof(thread2_stack),
+                   THREAD_PRIORITY, THREAD_TIMESLICE);
+    rt_thread_startup(&thread2);
+
+    return 0;
+}
